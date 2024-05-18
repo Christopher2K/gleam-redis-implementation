@@ -2,6 +2,7 @@ import gleam/io
 
 // Uncomment this block to pass the first stage
 
+import gleam/bytes_builder
 import gleam/erlang/process
 import gleam/option.{None}
 import gleam/otp/actor
@@ -13,7 +14,9 @@ pub fn main() {
   // Uncomment this block to pass the first stage
 
   let assert Ok(_) =
-    glisten.handler(fn(_conn) { #(Nil, None) }, fn(_msg, state, _conn) {
+    glisten.handler(fn(_conn) { #(Nil, None) }, fn(_msg, state, conn) {
+      let pong_response = bytes_builder.from_string("+PONG\r\n")
+      let assert Ok(_) = glisten.send(conn, pong_response)
       actor.continue(state)
     })
     |> glisten.serve(6379)
