@@ -1,50 +1,46 @@
 import gleam/bytes_builder
-import gleam/dict.{type Dict}
+import gleam/erlang/process
 import gleam/io
 import gleam/list
+import gleam/option.{None, Some}
 
 import encoder
+import session.{type Actor}
 
-pub type State =
-  Dict(String, String)
-
-pub fn handle_unknown_command(command: String, state: State) {
+pub fn handle_unknown_command(command: String) {
   io.debug("Unsupported command: " <> command)
-  #(bytes_builder.from_string(""), state)
+  bytes_builder.from_string("")
 }
 
-pub fn handle_ping(state: State) {
-  #(bytes_builder.from_string("+PONG\r\n"), state)
+pub fn handle_ping() {
+  bytes_builder.from_string("+PONG\r\n")
 }
 
-pub fn handle_echo_command(args: List(String), state: State) {
+pub fn handle_echo_command(args: List(String)) {
   let assert Ok(arg) = list.at(args, 0)
 
-  #(
-    arg
+  arg
+  |> encoder.encode_string()
+  |> bytes_builder.from_bit_array()
+}
+
+pub fn handle_get_command(args: List(String), actor: Actor) {
+  let assert Ok(key) = list.at(args, 0)
+  let response =
+    process.call(actor, fn(subject) { session.Get(key, subject) }, 1000)
+
+  case response {
+    Some(data) ->
+      data
       |> encoder.encode_string()
-      |> bytes_builder.from_bit_array(),
-    state,
-  )
+      |> bytes_builder.from_bit_array()
+    None -> bytes_builder.from_string("$-1\r\n")
+  }
 }
 
-pub fn handle_get_command(args: List(String), state: Dict(String, String)) {
-  let assert Ok(arg) = list.at(args, 0)
-  #(
-    case dict.get(state, arg) {
-      Ok(data) ->
-        data
-        |> encoder.encode_string()
-        |> bytes_builder.from_bit_array()
-
-      Error(_) -> bytes_builder.from_string("$-1\r\n")
-    },
-    state,
-  )
-}
-
-pub fn handle_set_command(args: List(String), state: Dict(String, String)) {
-  let assert [key, value] = args
-  let new_state = dict.insert(state, key, value)
-  #(bytes_builder.from_string("+OK\r\n"), new_state)
+pub fn handle_set_command(args: List(String), actor: Actor) {
+  let assert [key, value, ..] = args
+  // TODO: Maybe this should return something like a Result
+  process.send(actor, session.Set(key, value, None))
+  bytes_builder.from_string("+OK\r\n")
 }
