@@ -14,12 +14,24 @@ pub fn main() {
   // Uncomment this block to pass the first stage
 
   let assert Ok(_) =
-    glisten.handler(fn(_conn) { #(Nil, None) }, fn(_msg, state, conn) {
-      let pong_response = bytes_builder.from_string("+PONG\r\n")
-      let assert Ok(_) = glisten.send(conn, pong_response)
-      actor.continue(state)
-    })
+    glisten.handler(on_new_connection, socket_event_loop)
     |> glisten.serve(6379)
 
   process.sleep_forever()
+}
+
+/// On new socket connection
+pub fn on_new_connection(_conn: glisten.Connection(Nil)) {
+  #(Nil, None)
+}
+
+/// Socket event loop handler
+pub fn socket_event_loop(
+  _msg: glisten.Message(nil),
+  state: Nil,
+  conn: glisten.Connection(Nil),
+) {
+  let pong_response = bytes_builder.from_string("+PONG\r\n")
+  let assert Ok(_) = glisten.send(conn, pong_response)
+  actor.continue(state)
 }
