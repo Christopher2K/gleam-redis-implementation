@@ -2,14 +2,14 @@ import gleam/io
 
 // Uncomment this block to pass the first stage
 import gleam/bytes_builder
+import gleam/dict.{type Dict}
 import gleam/erlang/process
-import gleam/list
 import gleam/option.{None}
 import gleam/otp/actor
 import gleam/string
 import glisten
 
-import encoder
+import commands
 import parser
 
 pub fn main() {
@@ -26,48 +26,36 @@ pub fn main() {
 
 /// On new socket connection
 pub fn on_new_connection(_conn: glisten.Connection(_)) {
-  #(Nil, None)
+  #(dict.new(), None)
 }
 
 /// Socket event loop handler
 pub fn socket_event_loop(
   msg: glisten.Message(_),
-  state: Nil,
+  state: Dict(String, String),
   conn: glisten.Connection(_),
 ) {
   let assert glisten.Packet(data) = msg
 
-  let response = case data {
+  let #(response, new_state) = case data {
     <<"*":utf8, content:bytes>> -> {
-      let result = parser.parse_array(content)
-      let assert Ok(command) = list.at(result, 0)
+      let assert [command, ..args] = parser.parse_array(content)
       let command = string.lowercase(command)
 
       case command {
-        "echo" -> {
-          let assert Ok(argument) =
-            result
-            |> list.at(1)
-
-          argument
-          |> encoder.encode_string()
-          |> bytes_builder.from_bit_array()
-        }
-
-        "ping" -> bytes_builder.from_string("+PONG\r\n")
-
-        _ -> {
-          io.println("Unsupported command")
-          bytes_builder.from_string("")
-        }
+        "echo" -> commands.handle_echo_command(args, state)
+        "ping" -> commands.handle_ping(state)
+        "get" -> commands.handle_get_command(args, state)
+        "set" -> commands.handle_set_command(args, state)
+        _ -> commands.handle_unknown_command(command, state)
       }
     }
     _ -> {
       io.println("Unsupported datatype")
-      bytes_builder.from_string("")
+      #(bytes_builder.from_string(""), state)
     }
   }
 
   let assert Ok(_) = glisten.send(conn, response)
-  actor.continue(state)
+  actor.continue(new_state)
 }
